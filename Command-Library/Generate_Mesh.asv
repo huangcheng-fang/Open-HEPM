@@ -1,0 +1,51 @@
+function Model=Generate_Mesh(Model,Geometry,partID,varargin)
+%==========================Check input=====================================
+for vi=1:2:numel(varargin)
+    switch varargin{vi}
+        case 'Hface'
+            for gi=1:1:numel(Geometry)
+                faceSize=varargin{vi+1}{gi};
+                for fi=1:1:size(faceSize,1)
+                    faceID=nearestFace(Geometry(gi),faceSize(fi,1:3));
+                    faceSize(fi,1:2)=[faceID,faceSize(fi,4)];
+                end
+                if ~isempty(faceSize)
+                varargin{vi+1}{gi}=num2cell(reshape(faceSize(:,1:2).',1,[]));
+                end
+            end
+        case 'Order'
+            varargin{vi}="GeometricOrder";
+            Order=varargin{vi+1};
+            GeometricOrder=coder.nullcopy(cell(numel(Geometry),1));
+            for gi=1:1:numel(Geometry)
+                if Order(gi)==1
+                    GeometricOrder{gi}="linear";
+                elseif Order(gi)==2
+                    GeometricOrder{gi}="quadratic";
+                elsec
+                    error('unsurpported Element Order')
+                end
+            end
+            varargin{vi+1}=GeometricOrder;
+        otherwise
+            varargin{vi+1}=num2cell(varargin{vi+1});
+    end
+    varargin{vi}=repmat(varargin(vi),1,numel(Geometry));
+end
+%==========================================================================
+if numel(varargin)<10
+    for vi=numel(varargin)+1:2:10
+        varargin{vi}=repmat("GeometricOrder",1,numel(Geometry));
+        varargin{vi+1}=repmat({"linear"},1,numel(Geometry));
+    end
+end
+%========================main function=====================================
+partIdCell=coder.nullcopy(cell(numel(Geometry),1));
+for gi=1:1:numel(Geometry)
+    pdemodel=createpde();pdemodel.Geometry=Geometry(gi);
+    FEMesh(gi)=generateMesh(pdemodel,varargin{1}{gi},varargin{2}{gi},varargin{3}{gi},varargin{4}{gi},varargin{5}{gi},varargin{6}{gi},varargin{7}{gi},varargin{8}{gi},varargin{9}{gi},varargin{10}{gi});
+    partIdCell{gi}=partID(gi);
+end
+[elementCell,etypeCell,nodeCell]=Extract_mesh(FEMesh);
+Model=Import_FE_mesh(Model,nodeCell,elementCell,etypeCell,partIdCell);
+end
