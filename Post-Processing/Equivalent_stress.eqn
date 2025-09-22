@@ -1,0 +1,3 @@
+#!MC 1410
+$!ALTERDATA 
+  EQUATION = '{Equivalent_stress}=sqrt((({Sx}-{Sy})**2+({Sy}-{Sz})**2+({Sz}-{Sx})**2)/2+({Sxy}**2+{Syz}**2+{Sxz}**2)*3)'

@@ -1,0 +1,15 @@
+function Mesh=Update_element_geometry(Mesh)
+nodes=Mesh.nodes;
+etype=Mesh.etype;
+elements=Mesh.elements;
+ecenter=zeros(size(elements,1),size(nodes,2));
+%==========================================================================
+for j=1:1:size(elements,2)
+nid=elements(:,j);
+eid=find(nid~=0&~isnan(nid));
+x=x+accumarray(eid,nodes(nid(eid),:))
+
+end
+%==============================Output======================================
+Mesh.ecenter=ecenter;
+end

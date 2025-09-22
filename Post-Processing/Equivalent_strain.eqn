@@ -1,0 +1,3 @@
+#!MC 1410
+$!AlterData 
+  Equation = '{PEEQ}=sqrt((({PEx}-{PEy})**2+({PEy}-{PEz})**2+({PEz}-{PEx})**2+({PExy}**2+{PEyz}**2+{PExz}**2)*1.5)*2/9)'

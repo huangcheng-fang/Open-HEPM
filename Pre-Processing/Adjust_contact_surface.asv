@@ -1,0 +1,31 @@
+function Model=Adjust_contact_surface(Model,varargin)
+%==========================Check input=====================================
+for vi=1:2:numel(varargin)
+    if isempty(varargin{vi});continue;end
+    switch varargin{vi}
+        case 'Slave_set'
+            slave_set=varargin{vi+1};
+        case 'Master_set'
+            master_set=varargin{vi+1};
+        otherwise
+            disp(['Unknow input type is ignored:',varargin{vi}])
+    end
+end
+%========================main function=====================================
+nodes=Model.Mesh.nodes;
+coor=nodes.';coor=coor(:);
+Sset=Model.Set.surface_set;
+surfaces=Model.Mesh.surfaces;
+slave=Merge_cell(Sset,slave_set);
+master=Merge_cell(Sset,master_set);
+slave_surface=surfaces(slave,:);
+master_surface=surfaces(master,:);
+while norm(gap)/norm(coor(slave_dof))
+[contact_matrix,R_matrix,~,slave_dof]=surface_to_surface(slave_surface,master_surface,nodes,1,true);
+gap=R_matrix*(contact_matrix*coor);
+gap(1:3:end)=0;gap(2:3:end)=0;
+coor(slave_dof)=coor(slave_dof)-R_matrix.'*gap;
+nodes=reshape(coor,3,[]).';
+%==========================================================================
+Model.Mesh.nodes=nodes;
+end
