@@ -1,0 +1,70 @@
+function K=Form_SPFEM_stiffness_matrix(FEcell,Dmatrix,Fai,node_volume,maxdof)
+tic
+CB_matrix=FEcell.B_matrix;
+CEid=FEcell.Element_id;
+CElement_dof=FEcell.Element_dof;
+CElement=FEcell.Elements;
+CdetJac=FEcell.DetJac;
+FEcell_num=numel(CEid);
+DOF=Get_node_dof_list(maxdof/3,[6]);
+%==========================================================================
+ip=Hammer_integral(3,2);
+Ne=Tetrahedron_interpolation(ip);
+N_elment=0;
+for i=1:1:numel(ip,1)
+    Ns(1,1:6:24)=Ne(i,:);
+    Ns(2,2:6:24)=Ne(i,:);
+    Ns(3,3:6:24)=Ne(i,:);
+    Ns(4,4:6:24)=Ne(i,:);
+    Ns(5,5:6:24)=Ne(i,:);
+    Ns(6,6:6:24)=Ne(i,:);
+    N_elment=N_elment+Ns'*Ns;
+end
+container=Create_parallel_container(FEcell_num);
+for fi=1:FEcell_num
+KValue=pagemtimes(N_elment,CdetJac{fi});
+KIndexI=reshape(DOF{1}(:,CElement{fi}(:)),24,1,1,[]);
+KIndexI=repmat(KIndexI,1,size(KIndexI,1),1,1);
+KIndexJ=pagetranspose(KIndexI);
+container(fi,1).c1=KIndexI(:);
+container(fi,1).c2=KIndexJ(:);
+container(fi,1).c3=KValue(:);
+end
+[I,J,V]=Merge_container(container,1);
+DD=sparse(I,J,V);
+%=========================Calculate_B_matrix===============================
+container=Create_parallel_container(FEcell_num);
+for fi=1:FEcell_num
+KValue=CB_matrix{fi};
+KIndexI=reshape((CEid{fi}*6-[5,4,3,2,1,0])',6,1,1,[]);
+KIndexI=repmat(KIndexI,1,size(CB_matrix{fi},2),1,1);
+KIndexJ=reshape(CElement_dof{fi},size(CElement_dof{fi},1),1,1,[]);
+KIndexJ=pagetranspose(repmat(KIndexJ,1,size(KIndexI,1),1,1));
+container(fi,1).c1=KIndexI(:);
+container(fi,1).c2=KIndexJ(:);
+container(fi,1).c3=KValue(:);
+end
+[I,J,V]=Merge_container(container,1);
+%--------------------------------------------------------------------------
+B=sparse(I,J,V,size(Fai{1},2)*6,maxdof);
+%=============================Form_D_matrix================================
+node_volume=node_volume/6;
+NodeDofList2=reshape(1:maxdof/3*6,6,[]);
+DV=pagemtimes(Dmatrix,permute(full(node_volume),[4,2,3,1]));
+DI=permute(NodeDofList2,[1,3,2]);
+DI=repmat(DI,1,size(DI,1));
+DJ=pagetranspose(DI);
+%====================Calculate_smoothing_factor_matrix=====================
+K=sparse(maxdof,maxdof);
+for ipi=1:1:1
+    [I,J,V]=find(Fai{ipi});
+    I=I*6;J=J*6;
+    fai=sparse(I,J,V,size(Fai{ipi},1)*6,size(Fai{ipi},2)*6);
+    for ii=1:1:5
+        fai=fai+sparse(I-ii,J-ii,V,size(fai,1),size(fai,2));
+    end
+    SB=fai*B;
+    D=sparse(DI(:),DJ(:),reshape(DV(:,:,ipi,:),[],1),maxdof*2,maxdof*2);
+    K=K+SB'*DD*SB;
+end
+end
