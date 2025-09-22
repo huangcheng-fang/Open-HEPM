@@ -1,0 +1,67 @@
+function [Result,Fint,NDep]=Update_element_field(Result,Mesh,FE,MID,Material,GNL)
+tic;
+Key=Keywords();
+B_matrix=FE.B_matrix;
+Dof=FE.dof;
+%============================element strain================================
+[Edstrain,Espin]=Get_element_dstrain(FE,Mesh,Result.dU,GNL);
+%=============================stress spin==================================
+Nstress=Result.Nstress;
+if GNL
+for ni=1:Pnum
+    eid=Nconnection(ni,1:Nconnection(ni,end));
+    coeff=Pcoeff(:,1:Nconnection(ni,end),ni);
+    Nspin=Espin(:,eid)*coeff.';
+    for ii=1:1:IPnum
+        w=[0,Nspin(1,ii),-Nspin(3,ii);-Nspin(1,ii),0,Nspin(2,ii);Nspin(3,ii),-Nspin(2,ii),0];
+        stress=Nstress(:,ii,ni);
+        sigmar=[stress(1),stress(4),stress(6);stress(4),stress(2),stress(5);stress(6),stress(5),stress(3)];
+        sigmar=sigmar-(w*sigmar+sigmar*w.');
+        Nstress(1:6,ii,ni)=sigmar([1;5;9;2;6;3]);
+    end
+end
+end
+%==================material constitutive at particle=======================
+Npstrain=Result.Npstrain;
+NDep=zeros(6,6,IPnum,Pnum);
+for ni=1:Pnum
+    D_elastic=Material(MID(ni)).elasticity.D_matrix;
+    plasticity=Material(MID(ni)).plasticity;
+    Depi=zeros(6,6,IPnum);
+    switch plasticity.type
+        case Key.none
+            for ipi=1:1:IPnum
+                Nstress(:,ipi,ni)=Nstress(:,ipi,ni)+D_elastic*Ndstrain(:,ipi,ni);
+            end
+            NDep(:,:,:,ni)=repmat(D_elastic,1,1,IPnum);
+        case Key.mohr_coulomb
+            mc_angle=plasticity.parameter;
+            hardpara=plasticity.harden_parameter;
+            for ipi=1:1:IPnum
+                stress=Nstress(:,ipi,ni);
+                dstrain=Ndstrain(:,ipi,ni);
+                pstrain=Npstrain(:,ipi,ni);
+                [Depi(:,:,ipi),Nstress(:,ipi,ni),Npstrain(:,ipi,ni)]=Mohr_Coulomb3D(D_elastic,mc_angle/180*pi,hardpara,stress,pstrain,dstrain);
+            end
+            NDep(:,:,:,ni)=Depi;
+        otherwise
+            error('Unkonw plasticity type')
+    end
+end
+Result.Nstress=Nstress;
+Result.Npstrain=Npstrain;
+%========================internal force vector=============================
+enn=elements(:,end)*3;
+Fint=zeros(maxdof,1);
+for ni=1:1:Pnum
+    eid=Nconnection(ni,1:Nconnection(ni,end));
+    coeff=Pcoeff(:,1:Nconnection(ni,end),ni);
+    stress=Nstress(:,:,ni);
+    for ii=1:1:Nconnection(ni,end)
+        ei=eid(ii);dof=Dof(ei,1:enn(ei));
+        Fint(dof)=Fint(dof)+B_matrix(1:6,1:enn(ei),ei).'*(stress*coeff(:,ii))*PV(ni)/6;
+    end
+end
+%==========================================================================
+time=toc;fprintf("Particle fields is updated:%fs\n",time);
+end

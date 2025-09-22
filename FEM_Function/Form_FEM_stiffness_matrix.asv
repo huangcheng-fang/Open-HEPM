@@ -1,0 +1,28 @@
+function K=Form_FEM_stiffness_matrix(FEcell,Dmatrix,maxdof)
+tic;
+CElement_dof=FEcell.Element_dof;
+CDetJac=FEcell.DetJac;
+CB_matrix=FEcell.B_matrix;
+NumFEcell=numel(CElement_dof);
+%=========================Form_stiffness_matrix============================
+container=Create_parallel_container(NumFEcell);
+for fi=1:NumFEcell
+    EDepJac=pagemtimes(Dmatrix{fi},CDetJac{fi});
+    KValue=pagemtimes(CB_matrix{fi},'transpose',EDepJac,'none');
+    KValue=pagemtimes(KValue,CB_matrix{fi});
+    KValue=permute(sum(KValue,3),[1,2,4,3]);
+    %--------------------------------------------------------------------------
+    ndof=size(CB_matrix{fi},2);
+    KIndexI=CElement_dof{fi}(1:ndof,dof_id,:,:);
+    KIndexI=repmat(KIndexI,1,size(KIndexI,1),1);
+    KIndexJ=pagetranspose(KIndexI);
+    container(fi,1).c1=KIndexI(:);
+    container(fi,1).c2=KIndexJ(:);
+    container(fi,1).c3=KValue(:);
+end
+[I,J,V]=Merge_container(container,1);
+%=============================Output=======================================
+K=sparse(I,J,V,maxdof,maxdof);
+%==========================================================================
+time=toc;fprintf("System stiffness matrix is calculated: %fs\n",time);
+end
