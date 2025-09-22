@@ -1,0 +1,69 @@
+clc;clear all;close all;
+Key=Keywords();
+Model=Creat_Model();
+Geometry(1)=Import_Geometry('File',"tunnel_soil.stp",'Scale',100);
+Geometry(2)=Import_Geometry('File',"tunnel_lining.stp",'Scale',100);
+Model=Generate_Mesh(Model,Geometry,[1,2],"Hmin",[2,2],'Hmax',[2,2]);
+Model.Mesh.nodes=Model.Mesh.nodes(:,[1,3,2]);
+
+Geometry(1)=Generate_geometry(Model.Mesh,[1],[]);
+Geometry(2)=Generate_geometry(Model.Mesh,[2],[]);
+Model=Generate_Mesh(Model,Geometry,[1,2],"Hmin",[2,2],'Hmax',[2,2]);
+Plot_model(Model,1);
+
+addnodes=[];
+d=0.05;
+for i=1:1:100
+Geometry=Generate_geometry(Model.Mesh,1,addnodes);
+Model=Generate_Mesh(Model,Geometry,1,"Hmin",[2,2],'Hmax',[2,2]);
+
+Model=Define_node_set(Model,1,'RangeX',20+[-0.1,0.1]);
+Model=Define_node_set(Model,2,'RangeX',-20+[-0.1,0.1]);
+Model=Define_node_set(Model,3,'RangeY',[-0.1,0.1]);
+Model=Define_node_set(Model,4,'RangeZ',-1.52199+[-0.1,0.1]);
+Model.Set.node_set{5}=find(vecnorm(Model.Mesh.nodes(:,[1,3]),2,2)<8&Model.Mesh.nodes(:,2)<=50);
+
+Model=Define_element_set(Model,1,'RangePart',1,'RangeY',[30,inf]);
+Model=Define_particle_set(Model,1,'RangePart',1,'RangeY',[30,inf]);
+Model=Define_element_set(Model,2,'RangePart',2);
+Model=Define_particle_set(Model,2,'RangePart',2);
+Model=Define_element_set(Model,3,'RangePart',1,'RangeY',[30,-inf]);
+Model=Define_particle_set(Model,3,'RangePart',1,'RangeY',[30,-inf]);
+Model=Define_element_set(Model,4,'RangePart',1,'RangeY',[50,inf]);
+
+elasticity=struct('type',Key.linear,'parameter',[1e8,0.3,2500]);
+plasticity=struct('type',Key.drucker_prager,'parameter',[20,20]/180*pi,'harden_parameter',[0,0.3e6*(1-i/60)]);
+Model=Define_material_property(Model,1,'Eset',[1],'Pset',[1],'Elasticity',elasticity,'Plasticity',plasticity);
+elasticity=struct('type',Key.linear,'parameter',[10e9,0.3,20e3]);
+Model=Define_material_property(Model,2,'Eset',[2,3],'Pset',[2,3],'Elasticity',elasticity);
+if i==1
+    Model=Define_material_property(Model,1,'Eset',[1],'Pset',[1],'Elasticity',elasticity);
+end
+if i==2
+   Pfield.Stress(3,1,1,:)=Model.Mesh.particles(:,3)*-25000;
+   Pfield.Stress(1,1,1,:)=0.5*Pfield.Stress(3,1,1,:);
+   Pfield.Stress(2,1,1,:)=0.5*Pfield.Stress(3,1,1,:);
+end
+
+Model=Define_boundary_condition(Model,1,'Type',Keywords().displacement,'Nset',[1,2],'Expression',{0},'Direction',[1]);
+Model=Define_boundary_condition(Model,2,'Type',Keywords().displacement,'Nset',[3],'Expression',{0},'Direction',[2]);
+Model=Define_boundary_condition(Model,3,'Type',Keywords().displacement,'Nset',[4],'Expression',{0},'Direction',[3]);
+Model=Define_boundary_condition(Model,4,'Type',Keywords().displacement,'Nset',[5],'Expression',{0,0},'Direction',[1,3]);
+
+Model=Define_load_condition(Model,1,'Type',Keywords().body_force,'Eset',[1,3],'Expression',{-25000},'Direction',[3]);
+Model=Define_load_condition(Model,2,'Type',Keywords().body_force,'Eset',[4],'Expression',{-2000*(i-1)},'Direction',[3]);
+
+Tolerance=struct('Utol',5e-3,'Ftol',5e-3,'PCGtol',1e-8,'MaxIterNum',50);
+Result=Initialize_HPEM_Solver(Model,'GeometricNonlinear',1,'Tolerance',Tolerance,'EquationSolver','Direct');
+if i~=1;Result.Pfield=Pfield;end
+[Result,Model]=Submit_To_HEPM_Solver_Implicit(Result,Model,'TimeStep',1);
+Pfield=Result.Pfield;
+nid=find(vecnorm(Model.Mesh.nodes(:,[1,3]),2,2)<8&Model.Mesh.nodes(:,2)<=50&Model.Mesh.ninpart==1);
+addnodes=Model.Mesh.nodes(nid,:);
+Plot_result(Result,Model.Mesh,2,'PEEQ',1,[]);colorbar off
+view([120,12]);xlim([-20,20]);ylim([0,90]);zlim([-5,30]);axis off;drawnow
+Get_gif('HEPM-Example.gif',0.1,i==1)
+end
+
+Plot_result_on_particle(Result,Model.Mesh,1,'PEEQ',[1],[1,2,3]);colorbar off
+view([120,12]);xlim([-20,20]);ylim([0,90]);zlim([-5,30]);axis off;drawnow
